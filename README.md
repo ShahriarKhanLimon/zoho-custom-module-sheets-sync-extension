@@ -83,9 +83,6 @@ standard shape passed by a CRM workflow function trigger).
 | --- | --- | --- |
 | ![Dark theme](docs/screenshots/config-widget-dark.png) | ![Light theme](docs/screenshots/config-widget-light.png) | ![Field mapping](docs/screenshots/config-widget-mapping.png) |
 
-> These are sample renders with mock data for illustration — swap in real
-> screenshots from your own CRM org once it's wired up.
-
 ## Notes / known limitations
 
 - `id_column` supports single letters only (A–Z).
