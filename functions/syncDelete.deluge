@@ -1,0 +1,98 @@
+info "config = " + config;
+configJson = zoho.crm.getOrgVariable("custommoduletogooglesheetlimon__saveSheetChanges");
+info configJson;
+if(configJson == null || configJson == "")
+{
+	info "No sync config found — skipping.";
+	return;
+}
+syncConfig = configJson.toMap();
+getSpreadId = syncConfig.get("spreadsheet_id");
+getSheetName = syncConfig.get("worksheet_name");
+idColumnLetter = syncConfig.get("id_column");
+if(getSpreadId == null || getSheetName == null || idColumnLetter == null)
+{
+	info "Sync config is incomplete — skipping.";
+	return;
+}
+recordId = config.get("id");
+if(recordId == null)
+{
+	info "No record id found in config — skipping.";
+	return;
+}
+encodedSheetName = zoho.encryption.urlEncode(getSheetName);
+// ── 1. Find the ID column's index from its letter ──
+alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+idColumnIndex = alphabet.indexOf(idColumnLetter.toUpperCase());
+// ── 2. Fetch all rows and search for a match ──
+allRowsParamMap = Map();
+allRowsParamMap.put("spreadsheet_id",getSpreadId);
+allRowsParamMap.put("sheet_name",encodedSheetName);
+allRowsResp = zoho.crm.invokeConnector("custommoduletogooglesheetlimon.googlesheetlimon.get_sheet_values",allRowsParamMap);
+info "allRowsResp = " + allRowsResp;
+rows = allRowsResp.get("response").toMap().get("values");
+matchedRow = -1;
+// 0-based, for deleteDimension
+rowNumber = 0;
+if(rows != null)
+{
+	for each  row in rows
+	{
+		if(rowNumber != 0 && !row.isEmpty() && row.size() > idColumnIndex)
+		{
+			sheetIdVal = row.get(idColumnIndex).toString().trim();
+			if(sheetIdVal == recordId.toString().trim())
+			{
+				matchedRow = rowNumber;
+				break;
+			}
+		}
+		rowNumber = rowNumber + 1;
+	}
+}
+info "Matched row (0-based) = " + matchedRow;
+if(matchedRow == -1)
+{
+	info "No matching row found for record " + recordId + " — nothing to delete.";
+	return;
+}
+// ── 3. Get the numeric grid ID for this worksheet tab ──
+sheetInfoParamMap = Map();
+sheetInfoParamMap.put("spreadsheet_id",getSpreadId);
+sheetInfoResp = zoho.crm.invokeConnector("custommoduletogooglesheetlimon.googlesheetlimon.get_spreadsheet",sheetInfoParamMap);
+info "sheetInfoResp = " + sheetInfoResp;
+sheetsList = sheetInfoResp.get("response").toMap().get("sheets");
+gridId = -1;
+for each  s in sheetsList
+{
+	props = s.get("properties");
+	if(props.get("title") == getSheetName)
+	{
+		gridId = props.get("sheetId");
+	}
+}
+if(gridId == -1)
+{
+	info "Could not find worksheet " + getSheetName + " to resolve its grid ID — skipping.";
+	return;
+}
+// ── 4. Build and send the delete request ──
+rangeMap = Map();
+rangeMap.put("sheetId",gridId);
+rangeMap.put("dimension","ROWS");
+rangeMap.put("startIndex",matchedRow);
+rangeMap.put("endIndex",matchedRow + 1);
+deleteDimMap = Map();
+deleteDimMap.put("range",rangeMap);
+requestMap = Map();
+requestMap.put("deleteDimension",deleteDimMap);
+requestsList = List();
+requestsList.add(requestMap);
+bodyMap = Map();
+bodyMap.put("requests",requestsList);
+deleteParamMap = Map();
+deleteParamMap.put("spreadsheet_id",getSpreadId);
+deleteParamMap.put("body",bodyMap);
+deleteResp = zoho.crm.invokeConnector("custommoduletogooglesheetlimon.googlesheetlimon.delete_row",deleteParamMap);
+info "Delete Response: " + deleteResp;

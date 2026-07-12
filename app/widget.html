@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sync Config — Sync_Test → Google Sheets</title>
+  <script>
+    (function () {
+      var saved = localStorage.getItem('widgetTheme') || 'dark';
+      document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
+  <script src="https://js.zohocdn.com/embeddedapp/v1.0/embeddedApp.js"></script>
+  <script src="https://live.zwidgets.com/js-sdk/1.2/ZohoEmbededAppSDK.min.js"></script>
+  <style>
+    :root {
+      --panel:      #1b2436;
+      --panel-2:    #212c42;
+      --edge:       #33415c;
+      --edge-soft:  #2a3550;
+      --ink:        #e7ecf5;
+      --ink-dim:    #8b97ae;
+      --amber:      #e0a458;
+      --amber-dim:  #a97b3c;
+      --wire-ok:    #5fb98c;
+      --wire-err:   #d9695f;
+      --bg-grad-1:  #202b42;
+      --bg-grad-2:  #10151f;
+      --input-bg:   #141c2b;
+    }
+    html[data-theme="light"] {
+      --panel:      #ffffff;
+      --panel-2:    #f4f2ec;
+      --edge:       #ddd7c8;
+      --edge-soft:  #e7e2d5;
+      --ink:        #2a2620;
+      --ink-dim:    #8a8271;
+      --amber:      #c17d3f;
+      --amber-dim:  #a9683a;
+      --wire-ok:    #3f8f66;
+      --wire-err:   #b8463c;
+      --bg-grad-1:  #f4f2ec;
+      --bg-grad-2:  #e7e2d5;
+      --input-bg:   #fbfaf6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      background: radial-gradient(circle at 15% 0%, var(--bg-grad-1) 0%, var(--bg-grad-2) 55%);
+      min-height: 100vh;
+      padding: 32px 20px;
+      color: var(--ink);
+      transition: background 0.2s, color 0.2s;
+    }
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      background: var(--panel);
+      border: 1px solid var(--edge);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+    }
+    .rail {
+      position: relative;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 6px; padding: 22px 26px 20px;
+      background: var(--panel-2); border-bottom: 1px solid var(--edge);
+      text-align: center;
+    }
+    .theme-toggle {
+      position: absolute; top: 16px; right: 20px;
+      display: flex; align-items: center; gap: 6px;
+      background: var(--input-bg); border: 1px solid var(--edge);
+      border-radius: 20px; padding: 4px; cursor: pointer;
+    }
+    .theme-toggle button {
+      border: none; background: transparent; color: var(--ink-dim);
+      width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; font-size: 13px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .theme-toggle button.active { background: var(--amber); color: #17202f; }
+    .rail h2 {
+      font-family: 'JetBrains Mono', 'Consolas', monospace;
+      font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--ink-dim); font-weight: 500;
+    }
+    .rail h2 b { color: var(--ink); font-weight: 600; }
+    .body { padding: 26px 30px 30px; max-height: 72vh; overflow-y: auto; }
+    .section { margin-bottom: 20px; }
+    .section label {
+      display: block;
+      font-family: 'JetBrains Mono', 'Consolas', monospace;
+      font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--ink-dim); margin-bottom: 8px;
+    }
+    select, input[type="text"] {
+      width: 100%; padding: 10px 13px; border: 1px solid var(--edge);
+      border-radius: 6px; font-size: 14px; background: var(--input-bg);
+      color: var(--ink); outline: none;
+      transition: border 0.15s, box-shadow 0.15s;
+    }
+    select:focus, input:focus {
+      border-color: var(--amber-dim);
+      box-shadow: 0 0 0 3px rgba(224,164,88,0.15);
+    }
+    select {
+      appearance: none;
+      background-image: linear-gradient(45deg, transparent 50%, var(--ink-dim) 50%), linear-gradient(135deg, var(--ink-dim) 50%, transparent 50%);
+      background-position: calc(100% - 18px) center, calc(100% - 13px) center;
+      background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+    }
+    .header-status {
+      font-family: 'JetBrains Mono', 'Consolas', monospace;
+      font-size: 11.5px; color: var(--ink-dim); margin-top: 6px;
+      padding: 8px 12px; background: var(--input-bg);
+      border: 1px solid var(--edge-soft); border-radius: 5px;
+    }
+    .header-status.loaded { color: var(--wire-ok); border-color: rgba(95,185,140,0.35); }
+    .header-status.error  { color: var(--wire-err); border-color: rgba(217,105,95,0.35); }
+    .btn-save {
+      display: block; margin: 22px auto 0; background: var(--amber); color: #17202f;
+      border: none; padding: 11px 30px; border-radius: 6px; font-size: 13.5px;
+      font-weight: 700; letter-spacing: 0.02em; cursor: pointer;
+      font-family: 'JetBrains Mono', 'Consolas', monospace; text-transform: uppercase;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn-save:hover { background: #eab873; }
+    .btn-save:active { transform: translateY(1px); }
+    .btn-save:disabled { background: #4a5164; color: #8b97ae; cursor: not-allowed; }
+    .status {
+      margin-top: 14px; font-size: 13px; padding: 9px 13px; border-radius: 5px;
+      display: none; text-align: center; font-family: 'JetBrains Mono', 'Consolas', monospace;
+    }
+    .status.success { display: block; background: rgba(95,185,140,0.12); color: var(--wire-ok); border: 1px solid rgba(95,185,140,0.3); }
+    .status.error   { display: block; background: rgba(217,105,95,0.12); color: var(--wire-err); border: 1px solid rgba(217,105,95,0.3); }
+
+    .mapping-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; margin-bottom: 10px;
+    }
+    .mapping-toolbar input[type="text"] { font-size: 13px; padding: 8px 11px; }
+    .mapping-toolbar button {
+      flex-shrink: 0; background: var(--input-bg); color: var(--ink-dim);
+      border: 1px solid var(--edge); border-radius: 6px; padding: 8px 12px;
+      font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.04em; cursor: pointer;
+    }
+    .mapping-toolbar button:hover { color: var(--ink); border-color: var(--amber-dim); }
+    .mapping-table {
+      border: 1px solid var(--edge-soft); border-radius: 6px; overflow: hidden;
+    }
+    .mapping-row {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+      border-bottom: 1px solid var(--edge-soft);
+      background: var(--input-bg);
+    }
+    .mapping-row:last-child { border-bottom: none; }
+    .mapping-row .field-cell {
+      padding: 9px 12px; display: flex; flex-direction: column; justify-content: center;
+      border-right: 1px solid var(--edge-soft); background: var(--panel-2);
+    }
+    .mapping-row .field-cell .flabel { font-size: 13px; color: var(--ink); }
+    .mapping-row .field-cell .fapi { font-size: 10.5px; color: var(--ink-dim); font-family: 'JetBrains Mono', 'Consolas', monospace; margin-top: 1px; }
+    .mapping-row .col-cell { padding: 6px 8px; display: flex; align-items: center; }
+    .mapping-row .col-cell select { padding: 7px 9px; font-size: 12.5px; }
+    .mapping-empty {
+      padding: 14px; text-align: center; color: var(--ink-dim); font-size: 12.5px;
+    }
+    .mapping-count {
+      font-family: 'JetBrains Mono', 'Consolas', monospace; font-size: 11px;
+      color: var(--ink-dim); margin-top: 8px; text-align: right;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="rail">
+    <div class="theme-toggle">
+      <button id="theme-dark-btn" onclick="setTheme('dark')" title="Dark mode">●</button>
+      <button id="theme-light-btn" onclick="setTheme('light')" title="Light mode">○</button>
+    </div>
+    <h2>Sync Config — <b>Sync_Test → Google Sheets</b></h2>
+  </div>
+
+  <div class="body">
+    <div class="section">
+      <label>Spreadsheet</label>
+      <select id="spreadsheet-select" onchange="onSpreadsheetChange(this.value)">
+        <option value="">Loading your spreadsheets…</option>
+      </select>
+    </div>
+
+    <div class="section">
+      <label>Worksheet tab</label>
+      <select id="worksheet-select" onchange="onWorksheetChange(this.value)">
+        <option value="">Select a spreadsheet first</option>
+      </select>
+    </div>
+
+    <div class="section">
+      <label>Column holding CRM Record ID (used to find the right row for Update &amp; Delete)</label>
+      <select id="id-column-select">
+        <option value="">Select a worksheet tab first</option>
+      </select>
+      <div id="header-status" class="header-status">Select a worksheet tab to load column headers</div>
+    </div>
+
+    <div class="section">
+      <label>CRM Module (for field mapping)</label>
+      <select id="module-select" onchange="onModuleChange(this.value)">
+        <option value="">Loading modules…</option>
+      </select>
+      <div id="module-status" class="header-status">Detecting module…</div>
+    </div>
+
+    <div class="section" id="mapping-section" style="display:none;">
+      <label id="mapping-label">Field Mapping — CRM Field → Sheet Column</label>
+      <div class="mapping-toolbar">
+        <input type="text" id="mapping-filter" placeholder="Filter fields…" oninput="renderMappingTable()">
+        <button type="button" onclick="autoMapFields()">Auto-map by name</button>
+        <button type="button" onclick="clearMapping()">Clear</button>
+      </div>
+      <div class="mapping-table" id="mapping-table"></div>
+      <div class="mapping-count" id="mapping-count"></div>
+    </div>
+
+    <button class="btn-save" id="save-btn" onclick="saveConfig()">Save configuration</button>
+    <div class="status" id="status-msg"></div>
+  </div>
+</div>
+
+<script>
+  const NS_LIST_SHEETS     = "custommoduletogooglesheetlimon.googlesheetlimon.list_spreadsheets";
+  const NS_GET_SPREADSHEET = "custommoduletogooglesheetlimon.googlesheetlimon.get_spreadsheet";
+  const NS_GET_HEADERS     = "custommoduletogooglesheetlimon.googlesheetlimon.get_sheet_headers";
+  const CONFIG_PROPERTY    = "custommoduletogooglesheetlimon__saveSheetChanges";
+
+  let sheetHeaders   = [];
+  let moduleFields   = [];
+  let moduleApiName  = "";
+  let savedConfig    = {};
+  let fieldMapping   = {};
+
+  function setTheme(mode) {
+    document.documentElement.setAttribute('data-theme', mode);
+    localStorage.setItem('widgetTheme', mode);
+    updateThemeButtons(mode);
+  }
+  function updateThemeButtons(mode) {
+    document.getElementById('theme-dark-btn').classList.toggle('active', mode === 'dark');
+    document.getElementById('theme-light-btn').classList.toggle('active', mode === 'light');
+  }
+  updateThemeButtons(document.documentElement.getAttribute('data-theme') || 'dark');
+
+  ZOHO.embeddedApp.on("PageLoad", async function (data) {
+    console.log("PageLoad event data:", data);
+    moduleApiName = detectModuleFromPageLoad(data);
+    await loadSavedConfig();
+    await Promise.all([loadSpreadsheets(), loadModules()]);
+  });
+  ZOHO.embeddedApp.init();
+
+  function detectModuleFromPageLoad(data) {
+    if (!data) return "";
+    return data.Entity || data.entity || data.module || data.Module ||
+           data.module_api_name || data.moduleApiName ||
+           (data.Params && (data.Params.Entity || data.Params.module)) || "";
+  }
+
+  async function loadSavedConfig() {
+    try {
+      let resp = await ZOHO.CRM.API.getOrgVariable(CONFIG_PROPERTY);
+      if (resp["Success"] && resp["Success"].Content != "") {
+        savedConfig = JSON.parse(resp["Success"].Content);
+      } else {
+        savedConfig = {};
+      }
+      fieldMapping = savedConfig.field_mapping || {};
+      console.log("Parsed saved config:", savedConfig);
+    } catch (_) {
+      savedConfig = {};
+      fieldMapping = {};
+    }
+  }
+
+  async function loadModules() {
+    const sel = document.getElementById("module-select");
+    const statusEl = document.getElementById("module-status");
+    try {
+      const resp = await ZOHO.CRM.META.getModules();
+      const modules = (resp && resp.modules ? resp.modules : [])
+        .filter(m => m && m.api_name)
+        .sort((a, b) => (a.plural_label || a.api_name).localeCompare(b.plural_label || b.api_name));
+
+      sel.innerHTML = '<option value="">-- Select a module --</option>';
+      modules.forEach(m => {
+        const o = document.createElement("option");
+        o.value = m.api_name;
+        o.textContent = (m.plural_label || m.api_name) + " (" + m.api_name + ")";
+        sel.appendChild(o);
+      });
+
+      const preferred = (savedConfig.module && modules.some(m => m.api_name === savedConfig.module))
+        ? savedConfig.module
+        : (moduleApiName && modules.some(m => m.api_name === moduleApiName))
+          ? moduleApiName
+          : "";
+
+      if (preferred) {
+        sel.value = preferred;
+        moduleApiName = preferred;
+        statusEl.className = "header-status loaded";
+        statusEl.textContent = "Module: " + preferred;
+        await loadModuleFields();
+      } else {
+        statusEl.className = "header-status error";
+        statusEl.textContent = "Couldn't auto-detect the module — please select it above.";
+      }
+    } catch (e) {
+      console.error("loadModules error", e);
+      sel.innerHTML = '<option value="">Error loading modules</option>';
+      statusEl.className = "header-status error";
+      statusEl.textContent = "Failed to load module list.";
+    }
+  }
+
+  async function onModuleChange(apiName) {
+    moduleApiName = apiName;
+    const statusEl = document.getElementById("module-status");
+    if (!apiName) {
+      statusEl.className = "header-status";
+      statusEl.textContent = "Select a module to load its fields.";
+      moduleFields = [];
+      renderMappingTable();
+      return;
+    }
+    statusEl.className = "header-status";
+    statusEl.textContent = "Loading fields for " + apiName + "…";
+    await loadModuleFields();
+    statusEl.className = "header-status loaded";
+    statusEl.textContent = "Module: " + apiName + " — " + moduleFields.length + " fields loaded.";
+  }
+
+  async function loadModuleFields() {
+    if (!moduleApiName) {
+      document.getElementById("mapping-label").textContent = "Field Mapping — no module selected";
+      moduleFields = [];
+      renderMappingTable();
+      return;
+    }
+    document.getElementById("mapping-label").textContent =
+      "Field Mapping — " + moduleApiName + " field → Sheet Column";
+    try {
+      const resp = await ZOHO.CRM.META.getFields({ Entity: moduleApiName });
+      moduleFields = (resp && resp.fields ? resp.fields : [])
+        .filter(f => f && f.api_name)
+        .sort((a, b) => (a.field_label || "").localeCompare(b.field_label || ""));
+    } catch (e) {
+      console.error("loadModuleFields error", e);
+      moduleFields = [];
+    }
+    renderMappingTable();
+  }
+
+  async function onSpreadsheetChange(spreadsheetId) {
+    document.getElementById("worksheet-select").innerHTML = '<option value="">Select a spreadsheet first</option>';
+    resetHeaders();
+    if (spreadsheetId) await loadSheets(spreadsheetId);
+  }
+
+  async function onWorksheetChange(sheetName) {
+    resetHeaders();
+    const spreadsheetId = document.getElementById("spreadsheet-select").value;
+    if (spreadsheetId && sheetName) await loadHeaders(spreadsheetId, sheetName);
+  }
+
+  async function loadSpreadsheets() {
+    const sel = document.getElementById("spreadsheet-select");
+    try {
+      const resp = await ZOHO.CRM.CONNECTOR.invokeAPI(NS_LIST_SHEETS, {});
+      const files = JSON.parse(resp?.response || "{}").files || [];
+
+      sel.innerHTML = '<option value="">-- Select a Spreadsheet --</option>';
+      files.forEach(f => {
+        const o = document.createElement("option");
+        o.value = f.id;
+        o.textContent = f.name;
+        if (savedConfig.spreadsheet_id === f.id) o.selected = true;
+        sel.appendChild(o);
+      });
+
+      if (savedConfig.spreadsheet_id) await loadSheets(savedConfig.spreadsheet_id);
+    } catch (e) {
+      console.error("loadSpreadsheets error", e);
+      sel.innerHTML = '<option value="">Error loading spreadsheets</option>';
+    }
+  }
+
+  async function loadSheets(spreadsheetId) {
+    const sel = document.getElementById("worksheet-select");
+    sel.innerHTML = '<option>Loading tabs...</option>';
+    try {
+      const resp = await ZOHO.CRM.CONNECTOR.invokeAPI(NS_GET_SPREADSHEET, { "spreadsheet_id": spreadsheetId });
+      const sheets = JSON.parse(resp?.response || "{}").sheets || [];
+
+      sel.innerHTML = '<option value="">-- Select a Sheet Tab --</option>';
+      sheets.forEach(s => {
+        const o = document.createElement("option");
+        o.value = s.properties.title;
+        o.textContent = s.properties.title;
+        if (savedConfig.worksheet_name === s.properties.title) o.selected = true;
+        sel.appendChild(o);
+      });
+
+      if (savedConfig.worksheet_name) await loadHeaders(spreadsheetId, savedConfig.worksheet_name);
+    } catch (e) {
+      console.error("loadSheets error", e);
+      sel.innerHTML = '<option value="">Error loading tabs</option>';
+    }
+  }
+
+  async function loadHeaders(spreadsheetId, sheetName) {
+    const statusEl = document.getElementById("header-status");
+    const colSel = document.getElementById("id-column-select");
+    statusEl.className = "header-status";
+    statusEl.textContent = "Loading column headers...";
+
+    try {
+      const resp = await ZOHO.CRM.CONNECTOR.invokeAPI(NS_GET_HEADERS, {
+        "spreadsheet_id": spreadsheetId,
+        "sheet_name": sheetName
+      });
+      const values = JSON.parse(resp?.response || "{}").values || [];
+      sheetHeaders = values.length > 0 ? values[0] : [];
+
+      if (sheetHeaders.length === 0) {
+        statusEl.className = "header-status error";
+        statusEl.textContent = "No headers found — first row of the sheet is empty.";
+        colSel.innerHTML = '<option value="">No headers found</option>';
+        document.getElementById("mapping-section").style.display = "none";
+      } else {
+        statusEl.className = "header-status loaded";
+        statusEl.textContent = sheetHeaders.length + " headers loaded.";
+        colSel.innerHTML = '<option value="">-- Select the ID column --</option>';
+        sheetHeaders.forEach((h, idx) => {
+          const colLetter = indexToColumnLetter(idx);
+          const o = document.createElement("option");
+          o.value = colLetter;
+          o.textContent = h + " (col " + colLetter + ")";
+          if (savedConfig.id_column === colLetter) o.selected = true;
+          colSel.appendChild(o);
+        });
+
+        document.getElementById("mapping-section").style.display = "block";
+        renderMappingTable();
+      }
+    } catch (e) {
+      console.error("loadHeaders error", e);
+      statusEl.className = "header-status error";
+      statusEl.textContent = "Failed to load headers.";
+      document.getElementById("mapping-section").style.display = "none";
+    }
+  }
+
+  function indexToColumnLetter(idx) {
+    let letter = "";
+    idx = idx + 1;
+    while (idx > 0) {
+      let rem = (idx - 1) % 26;
+      letter = String.fromCharCode(65 + rem) + letter;
+      idx = Math.floor((idx - 1) / 26);
+    }
+    return letter;
+  }
+
+  function resetHeaders() {
+    sheetHeaders = [];
+    document.getElementById("header-status").className = "header-status";
+    document.getElementById("header-status").textContent = "Select a worksheet tab to load column headers";
+    document.getElementById("id-column-select").innerHTML = '<option value="">Select a worksheet tab first</option>';
+    document.getElementById("mapping-section").style.display = "none";
+    document.getElementById("mapping-table").innerHTML = "";
+  }
+
+  function columnOptionsHtml(selectedHeader) {
+    let html = '<option value="">-- Not synced --</option>';
+    sheetHeaders.forEach((h, idx) => {
+      const colLetter = indexToColumnLetter(idx);
+      const sel = (h === selectedHeader) ? " selected" : "";
+      html += `<option value="${escapeHtml(h)}"${sel}>${escapeHtml(h)} (col ${colLetter})</option>`;
+    });
+    return html;
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  function renderMappingTable() {
+    const container = document.getElementById("mapping-table");
+    const countEl = document.getElementById("mapping-count");
+    const filter = (document.getElementById("mapping-filter").value || "").toLowerCase();
+
+    if (!moduleFields.length) {
+      container.innerHTML = '<div class="mapping-empty">No CRM fields loaded for this module.</div>';
+      countEl.textContent = "";
+      return;
+    }
+
+    const visibleFields = moduleFields.filter(f =>
+      !filter ||
+      (f.field_label || "").toLowerCase().includes(filter) ||
+      (f.api_name || "").toLowerCase().includes(filter)
+    );
+
+    if (!visibleFields.length) {
+      container.innerHTML = '<div class="mapping-empty">No fields match that filter.</div>';
+      countEl.textContent = "";
+      return;
+    }
+
+    container.innerHTML = visibleFields.map(f => `
+      <div class="mapping-row">
+        <div class="field-cell">
+          <span class="flabel">${escapeHtml(f.field_label || f.api_name)}</span>
+          <span class="fapi">${escapeHtml(f.api_name)}</span>
+        </div>
+        <div class="col-cell">
+          <select data-field="${escapeHtml(f.api_name)}" onchange="onMappingChange(this)">
+            ${columnOptionsHtml(fieldMapping[f.api_name] || "")}
+          </select>
+        </div>
+      </div>
+    `).join("");
+
+    const mappedCount = Object.keys(fieldMapping).filter(k => fieldMapping[k]).length;
+    countEl.textContent = mappedCount + " of " + moduleFields.length + " fields mapped";
+  }
+
+  function onMappingChange(selectEl) {
+    const apiName = selectEl.getAttribute("data-field");
+    const value = selectEl.value;
+    if (value) {
+      fieldMapping[apiName] = value;
+    } else {
+      delete fieldMapping[apiName];
+    }
+    document.getElementById("mapping-count").textContent =
+      Object.keys(fieldMapping).filter(k => fieldMapping[k]).length + " of " + moduleFields.length + " fields mapped";
+  }
+
+  function autoMapFields() {
+    moduleFields.forEach(f => {
+      const label = (f.field_label || "").trim().toLowerCase();
+      const idx = sheetHeaders.findIndex(h => (h || "").trim().toLowerCase() === label);
+      if (idx !== -1) {
+        fieldMapping[f.api_name] = sheetHeaders[idx];
+      }
+    });
+    renderMappingTable();
+  }
+
+  function clearMapping() {
+    fieldMapping = {};
+    renderMappingTable();
+  }
+
+  async function saveConfig() {
+    const spreadsheet_id = document.getElementById("spreadsheet-select").value;
+    const worksheet_name = document.getElementById("worksheet-select").value;
+    const id_column       = document.getElementById("id-column-select").value;
+    const statusEl        = document.getElementById("status-msg");
+    const btn             = document.getElementById("save-btn");
+    statusEl.className    = "status";
+
+    if (!spreadsheet_id || !worksheet_name || !id_column) {
+      statusEl.className = "status error";
+      statusEl.textContent = "Please select spreadsheet, worksheet tab, and the ID column.";
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+
+    const config = {
+      spreadsheet_id,
+      worksheet_name,
+      id_column,
+      module: moduleApiName,
+      field_mapping: fieldMapping
+    };
+
+    try {
+      let variable_name = { "apiname": CONFIG_PROPERTY, "value": JSON.stringify(config) };
+      await ZOHO.CRM.CONNECTOR.invokeAPI("crm.set", variable_name);
+
+      statusEl.className = "status success";
+      statusEl.textContent = "Configuration saved!";
+      savedConfig = config;
+
+      setTimeout(function () {
+        ZOHO.CRM.CONFIG.close();
+      }, 800);
+    } catch (e) {
+      console.error("saveConfig error", e);
+      statusEl.className = "status error";
+      statusEl.textContent = "Failed to save. Please try again.";
+      btn.disabled = false;
+      btn.textContent = "Save Configuration";
+      return;
+    }
+
+    btn.disabled = false;
+    btn.textContent = "Save Configuration";
+  }
+</script>
+</body>
+</html>

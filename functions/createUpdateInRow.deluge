@@ -1,0 +1,150 @@
+info "config = " + config;
+configJson = zoho.crm.getOrgVariable("custommoduletogooglesheetlimon__saveSheetChanges");
+info configJson;
+if(configJson == null || configJson == "")
+{
+	info "No sync config found — skipping.";
+	return;
+}
+syncConfig = configJson.toMap();
+getModule = syncConfig.get("module");
+getSpreadId = syncConfig.get("spreadsheet_id");
+getSheetName = syncConfig.get("worksheet_name");
+idColumnLetter = syncConfig.get("id_column");
+// e.g. "A" — single letter for now
+getFieldMapping = syncConfig.get("field_mapping");
+// already a Map, no toMap() needed
+if(getModule == null || getSpreadId == null || getSheetName == null || getFieldMapping == null)
+{
+	info "Sync config is incomplete — skipping.";
+	return;
+}
+recordId = config.get("id");
+if(recordId == null)
+{
+	info "No record id found in config — skipping. Check the actual config keys once via a real workflow trigger.";
+	return;
+}
+getRecordDetails = zoho.crm.getRecordById(getModule,recordId.toLong());
+info "getRecordDetails = " + getRecordDetails;
+if(getRecordDetails.containsKey("status") && getRecordDetails.get("status") == "failure")
+{
+	info "getRecordById failed for module " + getModule + ", id " + recordId + " — skipping.";
+	return;
+}
+encodedSheetName = zoho.encryption.urlEncode(getSheetName);
+// ── 1. Fetch sheet headers (for column order) ──
+headerParamMap = Map();
+headerParamMap.put("spreadsheet_id",getSpreadId);
+headerParamMap.put("sheet_name",encodedSheetName);
+headersResp = zoho.crm.invokeConnector("custommoduletogooglesheetlimon.googlesheetlimon.get_sheet_headers",headerParamMap);
+info "headersResp = " + headersResp;
+headerValues = headersResp.get("response").toMap().get("values");
+if(headerValues == null || headerValues.size() == 0)
+{
+	info "No headers found in sheet, stopping sync.";
+	return;
+}
+headers = headerValues.get(0);
+// ── 2. Find the ID column's index from its letter (single-letter columns only) ──
+alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+idColumnIndex = alphabet.indexOf(idColumnLetter.toUpperCase());
+// ── 3. Build row values in header order — force recordId into the ID column ──
+rowValues = List();
+headerIndex = 0;
+for each  header in headers
+{
+	cellValue = "";
+	if(headerIndex == idColumnIndex)
+	{
+		cellValue = recordId.toString();
+	}
+	else
+	{
+		for each  crmField in getFieldMapping.keys()
+		{
+			if(getFieldMapping.get(crmField) == header)
+			{
+				rawVal = getRecordDetails.get(crmField);
+				cellValue = "";
+				if(rawVal != null)
+				{
+					try 
+					{
+						nameMap = rawVal.toMap();
+						if(nameMap.containsKey("name"))
+						{
+							cellValue = nameMap.get("name").toString();
+						}
+						else
+						{
+							cellValue = rawVal.toString();
+						}
+					}
+					catch (e)
+					{
+						cellValue = rawVal.toString();
+					}
+				}
+				break;
+			}
+		}
+	}
+	rowValues.add(cellValue);
+	headerIndex = headerIndex + 1;
+}
+info "Row Values: " + rowValues;
+if(rowValues.size() == 0)
+{
+	info "Nothing to write — field mapping produced no values.";
+	return;
+}
+// ── 4. Fetch all existing rows and search for a match ──
+allRowsParamMap = Map();
+allRowsParamMap.put("spreadsheet_id",getSpreadId);
+allRowsParamMap.put("sheet_name",encodedSheetName);
+allRowsResp = zoho.crm.invokeConnector("custommoduletogooglesheetlimon.googlesheetlimon.get_sheet_values",allRowsParamMap);
+info "allRowsResp = " + allRowsResp;
+rows = allRowsResp.get("response").toMap().get("values");
+existingRow = -1;
+rowNumber = 0;
+if(rows != null)
+{
+	for each  row in rows
+	{
+		rowNumber = rowNumber + 1;
+		if(rowNumber != 1 && !row.isEmpty() && row.size() > idColumnIndex)
+		{
+			sheetIdVal = row.get(idColumnIndex).toString().trim();
+			if(sheetIdVal == recordId.toString().trim())
+			{
+				existingRow = rowNumber;
+				break;
+			}
+		}
+	}
+}
+info "Existing Row = " + existingRow;
+outerList = List();
+outerList.add(rowValues);
+if(existingRow == -1)
+{
+	// ── APPEND ──
+	appendMap = Map();
+	appendMap.put("spreadsheet_id",getSpreadId);
+	appendMap.put("sheet_name",encodedSheetName);
+	appendMap.put("output",{"values":outerList});
+	appendResp = zoho.crm.invokeConnector("custommoduletogooglesheetlimon.googlesheetlimon.append_row",appendMap);
+	info "Append Response: " + appendResp;
+}
+else
+{
+	// ── UPDATE ──
+	updateMap = Map();
+	updateMap.put("spreadsheet_id",getSpreadId);
+	updateMap.put("sheet_name",getSheetName);
+	updateMap.put("row_number",existingRow);
+	updateMap.put("output",{"values":outerList});
+	updateResp = zoho.crm.invokeConnector("custommoduletogooglesheetlimon.googlesheetlimon.update_row",updateMap);
+	info "Update Response: " + updateResp;
+}
